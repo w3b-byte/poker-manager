@@ -16,14 +16,79 @@ nav ul {
   list-style: none;
   margin: 0;
   padding: 0;
+  flex-wrap: wrap;
 }
 nav a {
   color: #fff;
   text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: background 0.2s;
 }
-nav a:hover {
-  text-decoration: underline;
+nav a:focus, nav a:hover {
+  background: #444;
+  outline: 2px solid #fff;
 }
 main {
   padding: 2rem;
+  max-width: 600px;
+  margin: auto;
+}
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+form input, form button {
+  padding: 0.5rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+form input:focus, form button:focus {
+  border-color: #222;
+  outline: 2px solid #222;
+}
+form button {
+  background: #222;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+form button:hover, form button:focus {
+  background: #444;
+}
+ul {
+  padding-left: 1.2rem;
+}
+li {
+  margin-bottom: 0.5rem;
+}
+button.delete-btn, button.delete-session-btn, button.delete-bankroll-btn {
+  margin-left: 1rem;
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.95em;
+  transition: background 0.2s;
+}
+button.delete-btn:hover, button.delete-session-btn:hover, button.delete-bankroll-btn:hover {
+  background: #c0392b;
+}
+@media (max-width: 600px) {
+  main {
+    padding: 1rem;
+  }
+  nav ul {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  form {
+    flex-direction: column;
+  }
 }
