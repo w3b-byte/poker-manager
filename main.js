@@ -158,7 +158,12 @@ function renderScheduleView() {
       <input type="number" id="tournament-buyin" placeholder="Buy-in ($)" min="0" step="0.01" required />
       <button type="submit">Add Tournament</button>
     </form>
+    <button id="bulk-schedule-btn">Bulk Add</button>
+    <button id="calendar-view-btn">Calendar View</button>
     <ul id="tournament-list"></ul>
+    <div id="edit-tournament-modal" style="display:none;"></div>
+    <div id="bulk-schedule-modal" style="display:none;"></div>
+    <div id="calendar-modal" style="display:none;"></div>
   `;
   document.getElementById('tournament-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -170,7 +175,60 @@ function renderScheduleView() {
     renderTournamentList();
     e.target.reset();
   };
+  document.getElementById('bulk-schedule-btn').onclick = showBulkScheduleModal;
+  document.getElementById('calendar-view-btn').onclick = showCalendarModal;
   renderTournamentList();
+}
+
+function showBulkScheduleModal() {
+  const modal = document.getElementById('bulk-schedule-modal');
+  modal.style.display = 'block';
+  modal.innerHTML = `
+    <div style="background:#fff;border:1px solid #ccc;padding:1rem;max-width:400px;margin:1rem auto;">
+      <h3>Bulk Add Tournaments</h3>
+      <p>Paste one tournament per line, format: <code>Name,YYYY-MM-DDTHH:mm,Buyin</code></p>
+      <textarea id="bulk-tournaments" rows="6" style="width:100%;"></textarea>
+      <div style="margin-top:0.5rem;">
+        <button id="bulk-add-confirm">Add All</button>
+        <button id="bulk-add-cancel">Cancel</button>
+      </div>
+      <div id="bulk-add-feedback" style="margin-top:0.5rem;color:green;"></div>
+    </div>
+  `;
+  document.getElementById('bulk-add-cancel').onclick = () => {
+    modal.style.display = 'none';
+  };
+  document.getElementById('bulk-add-confirm').onclick = async () => {
+    const lines = document.getElementById('bulk-tournaments').value.split('\n');
+    let added = 0, failed = 0;
+    for (const line of lines) {
+      const [name, date, buyin] = line.split(',').map(s => s.trim());
+      if (name && date && !isNaN(parseFloat(buyin))) {
+        try {
+          await addTournament({ name, date, buyin: parseFloat(buyin) });
+          added++;
+        } catch {
+          failed++;
+        }
+      } else if (line.trim()) {
+        failed++;
+      }
+    }
+    document.getElementById('bulk-add-feedback').textContent = `${added} added, ${failed} failed.`;
+    renderTournamentList();
+    if (added > 0) setTimeout(() => { modal.style.display = 'none'; }, 1200);
+  };
+}
+
+async function updateTournament(id, updated) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('tournaments', 'readwrite');
+    const store = tx.objectStore('tournaments');
+    const req = store.put({ ...updated, id });
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e);
+  });
 }
 
 async function renderTournamentList() {
@@ -178,7 +236,7 @@ async function renderTournamentList() {
   if (!list) return;
   const tournaments = await getTournaments();
   list.innerHTML = tournaments.length
-    ? tournaments.map(t => `<li><strong>${t.name}</strong> - ${new Date(t.date).toLocaleString()} - $${t.buyin.toFixed(2)} <button data-id="${t.id}" class="delete-btn">Delete</button></li>`).join('')
+    ? tournaments.map(t => `<li><strong>${t.name}</strong> - ${new Date(t.date).toLocaleString()} - $${t.buyin.toFixed(2)} <button data-id="${t.id}" class="edit-tournament-btn">Edit</button> <button data-id="${t.id}" class="delete-btn">Delete</button></li>`).join('')
     : '<li>No tournaments scheduled.</li>';
   // Add event listeners for delete buttons
   document.querySelectorAll('.delete-btn').forEach(btn => {
@@ -188,6 +246,46 @@ async function renderTournamentList() {
       renderTournamentList();
     });
   });
+  // Add event listeners for edit buttons
+  document.querySelectorAll('.edit-tournament-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = Number(btn.getAttribute('data-id'));
+      const tournaments = await getTournaments();
+      const t = tournaments.find(t => t.id === id);
+      if (!t) return;
+      showEditTournamentModal(t);
+    });
+  });
+}
+
+function showEditTournamentModal(tournament) {
+  const modal = document.getElementById('edit-tournament-modal');
+  modal.style.display = 'block';
+  modal.innerHTML = `
+    <div style="background:#fff;border:1px solid #ccc;padding:1rem;max-width:350px;margin:1rem auto;">
+      <h3>Edit Tournament</h3>
+      <form id="edit-tournament-form">
+        <input type="text" id="edit-tournament-name" value="${tournament.name}" required />
+        <input type="datetime-local" id="edit-tournament-date" value="${tournament.date}" required />
+        <input type="number" id="edit-tournament-buyin" value="${tournament.buyin}" min="0" step="0.01" required />
+        <button type="submit">Save</button>
+        <button type="button" id="cancel-edit-tournament">Cancel</button>
+      </form>
+    </div>
+  `;
+  document.getElementById('edit-tournament-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('edit-tournament-name').value.trim();
+    const date = document.getElementById('edit-tournament-date').value;
+    const buyin = parseFloat(document.getElementById('edit-tournament-buyin').value);
+    if (!name || !date || isNaN(buyin)) return;
+    await updateTournament(tournament.id, { name, date, buyin });
+    modal.style.display = 'none';
+    renderTournamentList();
+  };
+  document.getElementById('cancel-edit-tournament').onclick = () => {
+    modal.style.display = 'none';
+  };
 }
 
 function renderSessionsView() {
@@ -394,3 +492,44 @@ document.addEventListener('DOMContentLoaded', () => {
   // Default view
   renderScheduleView();
 });
+
+async function showCalendarModal() {
+  const modal = document.getElementById('calendar-modal');
+  modal.style.display = 'block';
+  modal.innerHTML = `<div style="background:#fff;border:1px solid #ccc;padding:1rem;max-width:420px;margin:1rem auto;">
+    <h3>Calendar View <button id="close-calendar-modal" style="float:right;">Close</button></h3>
+    <div id="calendar-container"></div>
+  </div>`;
+  document.getElementById('close-calendar-modal').onclick = () => {
+    modal.style.display = 'none';
+  };
+  renderCalendar();
+}
+
+async function renderCalendar() {
+  const container = document.getElementById('calendar-container');
+  if (!container) return;
+  const tournaments = await getTournaments();
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const daysInMonth = lastDay.getDate();
+  let html = `<table style="width:100%;border-collapse:collapse;text-align:center;">
+    <tr><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th></tr><tr>`;
+  let dayOfWeek = firstDay.getDay();
+  for (let i = 0; i < dayOfWeek; i++) html += '<td></td>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = new Date(year, month, day).toISOString().slice(0, 10);
+    const todaysTournaments = tournaments.filter(t => t.date.slice(0, 10) === dateStr);
+    html += `<td style="vertical-align:top;min-width:60px;min-height:60px;border:1px solid #eee;">
+      <div style="font-weight:bold;">${day}</div>
+      ${todaysTournaments.map(t => `<div style='font-size:0.9em;margin:2px 0;background:#f0f0f0;border-radius:3px;padding:2px;'>${t.name}<br><span style='font-size:0.8em;'>$${t.buyin.toFixed(2)}</span></div>`).join('')}
+    </td>`;
+    if ((day + dayOfWeek) % 7 === 0 && day !== daysInMonth) html += '</tr><tr>';
+  }
+  for (let i = (daysInMonth + dayOfWeek) % 7; i < 7 && i !== 0; i++) html += '<td></td>';
+  html += '</tr></table>';
+  container.innerHTML = html;
+}
